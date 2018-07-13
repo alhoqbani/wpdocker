@@ -36,6 +36,14 @@ TODO
 ### Plugin Development
 TODO
 
+**Existing plugins**
+
+To add *your* plugin to the wordpress installation, 
+and assuming your plugin is on Github:
+```bash
+git submodule add -f https://github.com/<username>/<repo>.git src/wp-content/plugins/<plugin-name>
+```
+
 ### Credits
 The script and most of docker files are derived from the work of 
 [fideloper](https://github.com/fideloper) in [Vessel][vessel]
