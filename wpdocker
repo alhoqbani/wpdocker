@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+
+WD="WPDOCKER: "
+NC='\033[0m' # No Color
+RED="\033[0;31m${WD}${NC}"
+GRN="\033[0;32m${WD}${NC}"
+YLO="\033[0;33m${WD}${NC}"
+
+UNAMEOUT="$(uname -s)"
+case "${UNAMEOUT}" in
+    Linux*)             MACHINE=linux;;
+    Darwin*)            MACHINE=mac;;
+    MINGW64_NT-10.0*)   MACHINE=mingw64;;
+    *)                  MACHINE="UNKNOWN"
+esac
+
+if [ "$MACHINE" == "UNKNOWN" ]; then
+    printf "${RED}Unsupported system type\n"
+    printf "${RED}System must be a Macintosh, Linux or Windows\n"
+    printf "${RED}System detection determined via uname command\n"
+    printf "${RED}If the following is empty, could not find uname command: $(which uname)\n"
+    printf "${RED}Your reported uname is: $(uname -s)\n"
+    exit 1
+fi
+
+# Set environment variables for dev
+if [ "$MACHINE" == "linux" ]; then
+    if grep -q Microsoft /proc/version; then # WSL
+        export XDEBUG_HOST=10.0.75.1
+    else
+        if [ "$(command -v ip)" ]; then
+            export XDEBUG_HOST=$(ip addr show docker0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)
+        else
+            export XDEBUG_HOST=$(ifconfig docker0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1)
+        fi
+    fi
+    SEDCMD="sed -i"
+elif [ "$MACHINE" == "mac" ]; then
+    export XDEBUG_HOST=$(ipconfig getifaddr en0) # Ethernet
+
+    if [ -z "$XDEBUG_HOST" ]; then
+        export XDEBUG_HOST=$(ipconfig getifaddr en1) # Wifi
+    fi
+    SEDCMD="sed -i .bak"
+elif [ "$MACHINE" == "mingw64" ]; then # Git Bash
+    export XDEBUG_HOST=10.0.75.1
+    SEDCMD="sed -i"
+fi
+
+if [ -f .env ]; then
+    source ./.env
+fi
+
+export WP_PORT=${WP_PORT:-80}
+export MYSQL_PORT=${MYSQL_PORT:-33306}
+export WWWUSER=${WWWUSER:-$UID}
+
+# Is the environment running
+PSRESULT="$(docker-compose ps -q)"
+if [ ! -z "$PSRESULT" ]; then
+    EXEC="yes"
+else
+    EXEC="no"
+fi
+
+# Create base docker-compose command to run
+COMPOSE="docker-compose -f docker-compose.yml"
+
+# If we pass any arguments...
+if [ $# -gt 0 ]; then
+
+    # Source .env, which can over-ride env vars
+    # such as WP_PORT, MYSQL_PORT, and WWWUSER
+    if [ -f .env ]; then
+        source .env
+    fi
+
+
+    # Download, configure and install wordpress. This will also run docker-compose up.
+    if [ "$1" == "init" ]; then
+
+        if [ ! -f .env ]; then
+            printf "${RED}No .env file found within current working directory $(pwd)\n"
+            printf "${RED}Create a .env file before re-initializing\n"
+            printf "${RED}You can use .env.example. Run cp .env.example .env\n"
+            exit 1
+        fi
+
+        source ./.env
+
+        printf "${WD}Making wpdocker command available\n"
+        chmod +x wpdocker
+
+        printf "${YLO}Starting docker-compose. This will take some time to build the images, be patient..\n"
+        ${COMPOSE} up -d
+
+        printf "${WD}docker-composer is up. Now, we will download and install wordpress\n"
+
+        # Download wordpress and create config file.
+        ${COMPOSE} exec \
+                -u wpdocker \
+                app \
+                sh -c "wp core download;
+                wp config create \
+                --dbname=${WP_DB_DATABASE:-wordpress_db} \
+                --dbuser=${WP_DB_USERNAME:-root} \
+                --dbpass=${WP_DB_PASSWORD:-secret} \
+                --dbhost=${WP_DB_HOST:-mysql} \
+                --skip-check=true \
+                --force=true;"
+
+        # Wait for MYSQL container to be ready, then run wordpress installer
+        ${COMPOSE} exec \
+                -u wpdocker \
+                app \
+                sh -c "
+                    MAX_TRIES=10
+                    while [ \$MAX_TRIES -gt 0 ]; do
+                        MAX_TRIES=\$((\$MAX_TRIES - 1))
+                        wp core install \
+                            --url=${WP_URL:-http://localhost:8080} \
+                            --title=${WP_NAME:-WordpressDocker} \
+                            --admin_user=${WP_ADMIN:-admin} \
+                            --admin_password=${WP_ADMIN_PASSWORD:-secret} \
+                            --admin_email=${WP_ADMIN_EMAIL:-user@example.com} \
+                            --skip-email=true;
+                        if [ \$? -eq 0 ]; then
+                            exit 0
+                        fi
+                        echo '${YLO}MYSQL container is not ready, we will try again'
+                        sleep 3
+                    done
+                    exit 1"
+
+        if [ ! $? -eq 0 ]; then
+            printf "${RED}Failed to install wordpress open ${WP_URL:-http://localhost:8080} and run installer manually.\n"
+            exit 1
+        fi
+
+        printf "${GRN}\033[0;32mWordpress on Docker is ready.\033[0m\n"
+        printf "${GRN}Visit your wordpress site at: ${WP_URL:-http://localhost:8080}\n"
+
+    # Start up containers
+    elif [ "$1" == "start" ]; then
+        shift 1
+        ${COMPOSE} up -d "$@"
+
+    # Stop the containers
+    elif [ "$1" == "stop" ]; then
+        shift 1
+        ${COMPOSE} down "$@"
+
+    # If "wp" is used, pass-thru to "wp" to execute any wp-cli commands
+    # inside a new container
+    elif [ "$1" == "wp" ]; then
+        shift 1
+        if [ "$EXEC" == "yes" ]; then
+            ${COMPOSE} exec \
+                -u wpdocker \
+                app \
+                wp "$@"
+        else
+            echo -e "${RED}Containers are not running. Please run $0 start and then retry"
+            exit 1
+        fi
+
+
+    # Setup WP test scaffold for the given plugin
+    elif [ "$1" == "install-plugin-tests" ]; then
+
+        if [ $# -lt 2 ]; then
+	        echo "usage: $0 $1 <plugin-name>"
+	        exit 1
+        fi
+
+        if [ "$EXEC" == "yes" ]; then
+            ${COMPOSE} exec \
+                -u wpdocker \
+                app \
+                wp scaffold plugin-tests "$2"
+        else
+            echo -e "${RED}Containers are not running. Please run $0 start and then retry"
+            exit 1
+        fi
+
+    # Install wordpress and wordpress tests framework at ./tmp for testing.
+    elif [ "$1" == "install-wp-tests" ]; then
+
+        if [ $# -lt 2 ]; then
+	        echo "usage: $0 $1 <plugin-name>"
+	        exit 1
+        fi
+
+        INSTALL_FILE=/var/www/html/wp-content/plugins/$2/bin/install-wp-tests.sh
+
+        if [ ! -f ${INSTALL_FILE} ]; then
+            echo "Could not find installation file for plugin: ${2}"
+            echo "Please make sure the plugin exists and run ${0} install-plugin-tests ${2}"
+            exit 1
+        fi
+
+        DATABASE=${WP_TEST_DB_NAME:-wordpress_test}
+        USERNAME=${DB_USERNAME:-root}
+        DATABASE=${DB_PASSWORD:-secret}
+        HOST=${DB_HOST-mysql}
+        WP_VERSION=${WP_TEST_VERSION-latest}
+
+        if [ "$EXEC" == "yes" ]; then
+            ${COMPOSE} exec \
+                -u wpdocker \
+                app \
+                sh -c "TMPDIR=/tmp $INSTALL_FILE $DATABASE $USERNAME $DATABASE $HOST $WP_VERSION true"
+        else
+            echo -e "${RED}Containers are not running. Please run $0 start and then retry"
+            exit 1
+        fi
+
+    # If "composer" is used, pass-thru to "composer"
+    # inside a new container
+    elif [ "$1" == "composer" ] || [ "$1" == "comp" ]; then
+        shift 1
+        if [ "$EXEC" == "yes" ]; then
+            ${COMPOSE} exec \
+                -u wpdocker \
+                app \
+                composer "$@"
+        else
+            ${COMPOSE} run --rm \
+                app \
+                composer "$@"
+        fi
+
+    # If "test" is used, run unit tests,
+    # pass-thru any extra arguments to php-unit
+    elif [ "$1" == "test" ]; then
+        shift 1
+        if [ "$EXEC" == "yes" ]; then
+            ${COMPOSE} exec \
+                -u wpdocker \
+                app \
+                ./vendor/bin/phpunit "$@"
+        else
+            ${COMPOSE} run --rm \
+                app \
+                ./vendor/bin/phpunit "$@"
+        fi
+
+    # If "npm" is used, run npm
+    # from our node container
+    elif [ "$1" == "npm" ]; then
+        shift 1
+        ${COMPOSE} run --rm \
+            node \
+            npm "$@"
+
+    # If "yarn" is used, run yarn
+    # from our node container
+    elif [ "$1" == "yarn" ]; then
+        shift 1
+        ${COMPOSE} run --rm \
+            node \
+            yarn "$@"
+
+    # If "gulp" is used, run gulp
+    # from our node container
+    elif [ "$1" == "gulp" ]; then
+        shift 1
+        ${COMPOSE} run --rm \
+            node \
+            ./node_modules/.bin/gulp "$@"
+
+    # If "dump" is used, run mysqldump
+    # from our mysql container
+    elif [ "$1" == "dump" ]; then
+        shift 1
+        if [ "$EXEC" == "yes" ]; then
+            ${COMPOSE} exec \
+                mysql \
+                mysqldump -u root -p$DB_PASSWORD --default-character-set=utf8mb4 $DB_DATABASE | grep -v "mysqldump: \[Warning\]"
+        else
+            ${COMPOSE} run --rm \
+                mysql \
+                mysqldump -h mysql -u root -p$DB_PASSWORD --default-character-set=utf8mb4 $DB_DATABASE | grep -v "mysqldump: \[Warning\]"
+        fi
+
+    # Else, pass-thru args to docker-compose
+    else
+        ${COMPOSE} "$@"
+    fi
+else
+    # Use the docker-compose ps command if nothing else passed through
+    ${COMPOSE} ps
+fi
