@@ -168,12 +168,13 @@ if [ $# -gt 0 ]; then
     # Setup WP test scaffold for the given plugin
     elif [ "$1" == "install-plugin-tests" ]; then
 
-        if [ $# -lt 2 ]; then
-	        echo "usage: $0 $1 <plugin-name>"
-	        exit 1
-        fi
-
         if [ "$EXEC" == "yes" ]; then
+
+            if [ $# -lt 2 ]; then
+	            echo "usage: $0 $1 <plugin-name>"
+	            exit 1
+            fi
+
             ${COMPOSE} exec \
                 -u wpdocker \
                 app \
@@ -186,14 +187,19 @@ if [ $# -gt 0 ]; then
     # Install wordpress and wordpress tests framework at ./tmp for testing.
     elif [ "$1" == "install-wp-tests" ]; then
 
+        if [ "$EXEC" == "no" ]; then
+            echo -e "${RED}Containers are not running. Please run $0 start and then retry"
+            exit 1
+        fi
+
         if [ $# -lt 2 ]; then
 	        echo "usage: $0 $1 <plugin-name>"
 	        exit 1
         fi
 
-        INSTALL_FILE=/var/www/html/wp-content/plugins/$2/bin/install-wp-tests.sh
+        INSTALL_FILE=wp-content/plugins/$2/bin/install-wp-tests.sh
 
-        if [ ! -f ${INSTALL_FILE} ]; then
+        if [ ! -f ./src/${INSTALL_FILE} ]; then
             echo "Could not find installation file for plugin: ${2}"
             echo "Please make sure the plugin exists and run ${0} install-plugin-tests ${2}"
             exit 1
@@ -205,15 +211,10 @@ if [ $# -gt 0 ]; then
         HOST=${DB_HOST-mysql}
         WP_VERSION=${WP_TEST_VERSION-latest}
 
-        if [ "$EXEC" == "yes" ]; then
-            ${COMPOSE} exec \
-                -u wpdocker \
-                app \
-                sh -c "TMPDIR=/tmp $INSTALL_FILE $DATABASE $USERNAME $DATABASE $HOST $WP_VERSION true"
-        else
-            echo -e "${RED}Containers are not running. Please run $0 start and then retry"
-            exit 1
-        fi
+        ${COMPOSE} exec \
+            -u wpdocker \
+            app \
+            sh -c "TMPDIR=/tmp /var/www/html/$INSTALL_FILE $DATABASE $USERNAME $DATABASE $HOST $WP_VERSION true"
 
     # If "composer" is used, pass-thru to "composer"
     # inside a new container
