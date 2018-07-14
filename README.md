@@ -62,6 +62,10 @@ This command will run `wp scaffold plugin-tests` passing testing database inform
 It will also run the script `install-wp-tests.sh`  which will download a fresh Wrodpress installation 
 and the Wordpress testing framework to the [tmp](./tmp) directory.
 
+**Finally,** to run the tests for your plugin:
+```bash
+./wpdocker test <plugin-name> [extra-arguments-to-phpunit]
+```
 
 ### Credits
 The script and most of docker files are derived from the work of 
