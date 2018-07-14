@@ -153,39 +153,20 @@ if [ $# -gt 0 ]; then
     # If "wp" is used, pass-thru to "wp" to execute any wp-cli commands
     # inside a new container
     elif [ "$1" == "wp" ]; then
-        shift 1
-        if [ "$EXEC" == "yes" ]; then
-            ${COMPOSE} exec \
-                -u wpdocker \
-                app \
-                wp "$@"
-        else
+
+        if [ "$EXEC" == "no" ]; then
             echo -e "${RED}Containers are not running. Please run $0 start and then retry"
             exit 1
         fi
 
+        ${COMPOSE} exec \
+            -u wpdocker \
+            app \
+            wp "$@"
 
     # Setup WP test scaffold for the given plugin
-    elif [ "$1" == "install-plugin-tests" ]; then
-
-        if [ "$EXEC" == "yes" ]; then
-
-            if [ $# -lt 2 ]; then
-	            echo "usage: $0 $1 <plugin-name>"
-	            exit 1
-            fi
-
-            ${COMPOSE} exec \
-                -u wpdocker \
-                app \
-                wp scaffold plugin-tests "$2"
-        else
-            echo -e "${RED}Containers are not running. Please run $0 start and then retry"
-            exit 1
-        fi
-
     # Install wordpress and wordpress tests framework at ./tmp for testing.
-    elif [ "$1" == "install-wp-tests" ]; then
+    elif [ "$1" == "test-install" ]; then
 
         if [ "$EXEC" == "no" ]; then
             echo -e "${RED}Containers are not running. Please run $0 start and then retry"
@@ -193,18 +174,11 @@ if [ $# -gt 0 ]; then
         fi
 
         if [ $# -lt 2 ]; then
-	        echo "usage: $0 $1 <plugin-name>"
-	        exit 1
-        fi
-
-        INSTALL_FILE=wp-content/plugins/$2/bin/install-wp-tests.sh
-
-        if [ ! -f ./src/${INSTALL_FILE} ]; then
-            echo "Could not find installation file for plugin: ${2}"
-            echo "Please make sure the plugin exists and run ${0} install-plugin-tests ${2}"
+            echo "usage: $0 $1 <plugin-name>"
             exit 1
         fi
 
+        INSTALL_FILE=wp-content/plugins/$2/bin/install-wp-tests.sh
         DATABASE=${WP_TEST_DB_NAME:-wordpress_test}
         USERNAME=${DB_USERNAME:-root}
         DATABASE=${DB_PASSWORD:-secret}
@@ -214,7 +188,27 @@ if [ $# -gt 0 ]; then
         ${COMPOSE} exec \
             -u wpdocker \
             app \
-            sh -c "TMPDIR=/tmp /var/www/html/$INSTALL_FILE $DATABASE $USERNAME $DATABASE $HOST $WP_VERSION true"
+            sh -c "wp scaffold plugin-tests "$2" && /var/www/html/$INSTALL_FILE $DATABASE $USERNAME $DATABASE $HOST $WP_VERSION true"
+
+    # If "test" is used, run unit tests for the given plugin,
+    # pass-thru any extra arguments to php-unit
+    elif [ "$1" == "test" ]; then
+
+        if [ "$EXEC" == "no" ]; then
+            echo -e "${RED}Containers are not running. Please run $0 start and then retry"
+            exit 1
+        fi
+
+        if [ $# -lt 2 ]; then
+            printf "${RED}You must provide a plugin name to test\n"
+            echo "usage: $0 <plugin-name> [extra-phpunit-arguments]"
+            exit 1
+        fi
+
+        ${COMPOSE} exec \
+            -u wpdocker \
+            app \
+            sh -c "cd wp-content/plugins/$2 && phpunit $@"
 
     # If "composer" is used, pass-thru to "composer"
     # inside a new container
@@ -229,21 +223,6 @@ if [ $# -gt 0 ]; then
             ${COMPOSE} run --rm \
                 app \
                 composer "$@"
-        fi
-
-    # If "test" is used, run unit tests,
-    # pass-thru any extra arguments to php-unit
-    elif [ "$1" == "test" ]; then
-        shift 1
-        if [ "$EXEC" == "yes" ]; then
-            ${COMPOSE} exec \
-                -u wpdocker \
-                app \
-                ./vendor/bin/phpunit "$@"
-        else
-            ${COMPOSE} run --rm \
-                app \
-                ./vendor/bin/phpunit "$@"
         fi
 
     # If "npm" is used, run npm

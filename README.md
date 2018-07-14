@@ -33,16 +33,35 @@ and you should see to containers up and running.
 ## Usage
 TODO
 
-### Plugin Development
+## Plugin Development
 TODO
 
-**Existing plugins**
+.
 
+.
+
+.
+
+#### Add Existing plugins
 To add *your* plugin to the wordpress installation, 
 and assuming your plugin is on Github:
 ```bash
 git submodule add -f https://github.com/<username>/<repo>.git src/wp-content/plugins/<plugin-name>
 ```
+
+#### Testing Plugins
+wpdocker can prepare your plugin testing environment utilizing the WP-CLI `scaffold plugin-tests` command.
+
+Make your sure your plugin is located at `src/wp-content/plugins` and run the following command:
+```bash
+./wpdocker test-install <plugin-name>
+```
+
+This command will run `wp scaffold plugin-tests` passing testing database information located in `.env` file.
+
+It will also run the script `install-wp-tests.sh`  which will download a fresh Wrodpress installation 
+and the Wordpress testing framework to the [tmp](./tmp) directory.
+
 
 ### Credits
 The script and most of docker files are derived from the work of 
