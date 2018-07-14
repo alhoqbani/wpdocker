@@ -94,7 +94,7 @@ if [ $# -gt 0 ]; then
         printf "${YLO}Starting docker-compose. This will take some time to build the images, be patient..\n"
         ${COMPOSE} up -d
 
-        printf "${WD}docker-composer is up. Now, we will download and install wordpress\n"
+        printf "${GRN}docker-composer is up. Now, we will download and install wordpress\n"
 
         # Download wordpress and create config file.
         ${COMPOSE} exec \
@@ -179,16 +179,16 @@ if [ $# -gt 0 ]; then
         fi
 
         INSTALL_FILE=wp-content/plugins/$2/bin/install-wp-tests.sh
-        DATABASE=${WP_TEST_DB_NAME:-wordpress_test}
+        DATABASE=${WP_TEST_DB_NAME:-wordpress_test_db}
         USERNAME=${DB_USERNAME:-root}
-        DATABASE=${DB_PASSWORD:-secret}
+        PASSWORD=${DB_PASSWORD:-secret}
         HOST=${DB_HOST-mysql}
         WP_VERSION=${WP_TEST_VERSION-latest}
 
         ${COMPOSE} exec \
             -u wpdocker \
             app \
-            sh -c "wp scaffold plugin-tests "$2" && /var/www/html/$INSTALL_FILE $DATABASE $USERNAME $DATABASE $HOST $WP_VERSION true"
+            sh -c "wp scaffold plugin-tests $2 && /var/www/html/$INSTALL_FILE $DATABASE $USERNAME $PASSWORD $HOST $WP_VERSION true"
 
     # If "test" is used, run unit tests for the given plugin,
     # pass-thru any extra arguments to php-unit

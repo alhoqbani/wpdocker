@@ -13,7 +13,7 @@ services:
       WWWUSER: "${WWWUSER}"
       DB_DATABASE: "${DB_DATABASE:-wordpress_db}"
       DB_HOST: "${DB_HOST:-mysql}"
-      DB_USERNAME: "${DB_USERNAME:-wordpress_db}"
+      DB_USERNAME: "${DB_USERNAME:-wordpress_user}"
       DB_PASSWORD: "${DB_PASSWORD:-secret}"
     volumes:
      - ./src:/var/www/html
@@ -27,9 +27,9 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: "${DB_PASSWORD:-secret}"
       MYSQL_DATABASE: "${DB_DATABASE:-wordpress_db}"
-      MYSQL_USER: "${DB_USERNAME:-wordpress_db}"
+      MYSQL_USER: "${DB_USERNAME:-wordpress_user}"
       MYSQL_PASSWORD: "${DB_PASSWORD:-secret}"
-      WP_TEST_DB_NAME: ${WP_TEST_DB_NAME:-wordpress_test}
+      WP_TEST_DB_NAME: ${WP_TEST_DB_NAME:-wordpress_test_db}
     volumes:
      - wpdocker_mysql:/var/lib/mysql
      - ./docker/mysql/data:/docker-entrypoint-initdb.d
