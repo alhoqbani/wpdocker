@@ -205,10 +205,14 @@ if [ $# -gt 0 ]; then
             exit 1
         fi
 
+        PLUGIN_DIR=wp-content/plugins/$2
+
+        shift 2
+
         ${COMPOSE} exec \
             -u wpdocker \
             app \
-            sh -c "cd wp-content/plugins/$2 && phpunit $@"
+            sh -c "cd $PLUGIN_DIR && phpunit $@"
 
     # If "composer" is used, pass-thru to "composer"
     # inside a new container
