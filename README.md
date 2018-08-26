@@ -49,6 +49,12 @@ and assuming your plugin is on Github:
 git submodule add -f https://github.com/<username>/<repo>.git src/wp-content/plugins/<plugin-name>
 ```
 
+#### Running Composer
+If your plugin uses composer packages, you may run composer by using `./wpdocker composer <plugin-name>`. For example
+```bash
+./wpdocker composer <plugin-name> install
+```
+
 #### Testing Plugins
 wpdocker can prepare your plugin testing environment utilizing the WP-CLI `scaffold plugin-tests` command.
 

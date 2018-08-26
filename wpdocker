@@ -217,16 +217,25 @@ if [ $# -gt 0 ]; then
     # If "composer" is used, pass-thru to "composer"
     # inside a new container
     elif [ "$1" == "composer" ] || [ "$1" == "comp" ]; then
-        shift 1
+
+        if [ $# -lt 2 ]; then
+            printf "${RED}You must provide a plugin name to run composer against\n"
+            echo "usage: $0 <plugin-name> [composer-arguments]"
+            exit 1
+        fi
+
+        PLUGIN_DIR=wp-content/plugins/$2
+        shift 2
+
         if [ "$EXEC" == "yes" ]; then
             ${COMPOSE} exec \
                 -u wpdocker \
                 app \
-                composer "$@"
+                sh -c "cd $PLUGIN_DIR && composer $@"
         else
             ${COMPOSE} run --rm \
                 app \
-                composer "$@"
+                sh -c "cd $PLUGIN_DIR && composer $@"
         fi
 
     # If "npm" is used, run npm
