@@ -32,6 +32,11 @@ function needs_plugin_name() {
     fi
 
     PLUGIN_DIR=wp-content/plugins/$2
+
+    if [ ! -d ./src/${PLUGIN_DIR} ]; then
+        printf "${RED}Plugin \"$2\" was not found at $PLUGIN_DIR\n"
+        exit 1
+    fi
 }
 
 # Set environment variables for dev
