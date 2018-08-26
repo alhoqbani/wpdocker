@@ -23,6 +23,17 @@ if [ "$MACHINE" == "UNKNOWN" ]; then
     exit 1
 fi
 
+
+function needs_plugin_name() {
+    if [ $# -lt 2 ]; then
+        printf "${RED}You must provide a plugin name to run this command\n"
+        echo "usage: $0 <plugin-name> [extra-arguments]"
+        exit 1
+    fi
+
+    PLUGIN_DIR=wp-content/plugins/$2
+}
+
 # Set environment variables for dev
 if [ "$MACHINE" == "linux" ]; then
     if grep -q Microsoft /proc/version; then # WSL
@@ -94,7 +105,7 @@ if [ $# -gt 0 ]; then
         printf "${YLO}Starting docker-compose. This will take some time to build the images, be patient..\n"
         ${COMPOSE} up -d
 
-        printf "${GRN}docker-composer is up. Now, we will download and install wordpress\n"
+        printf "${GRN}docker-compose is up. Now, we will download and install wordpress\n"
 
         # Download wordpress and create config file.
         ${COMPOSE} exec \
@@ -218,13 +229,7 @@ if [ $# -gt 0 ]; then
     # inside a new container
     elif [ "$1" == "composer" ] || [ "$1" == "comp" ]; then
 
-        if [ $# -lt 2 ]; then
-            printf "${RED}You must provide a plugin name to run composer against\n"
-            echo "usage: $0 <plugin-name> [composer-arguments]"
-            exit 1
-        fi
-
-        PLUGIN_DIR=wp-content/plugins/$2
+        needs_plugin_name $@
         shift 2
 
         if [ "$EXEC" == "yes" ]; then
@@ -241,26 +246,42 @@ if [ $# -gt 0 ]; then
     # If "npm" is used, run npm
     # from our node container
     elif [ "$1" == "npm" ]; then
-        shift 1
+        needs_plugin_name $@
+        shift 2
+
         ${COMPOSE} run --rm \
             node \
-            npm "$@"
+            sh -c "cd $PLUGIN_DIR && npm $@"
 
     # If "yarn" is used, run yarn
     # from our node container
     elif [ "$1" == "yarn" ]; then
-        shift 1
+        needs_plugin_name $@
+        shift 2
+
         ${COMPOSE} run --rm \
             node \
-            yarn "$@"
+            sh -c "cd $PLUGIN_DIR && yarn $@"
+
+    # If "grunt" is used, run gulp
+    # from our node container
+    elif [ "$1" == "grunt" ]; then
+        needs_plugin_name $@
+        shift 2
+
+        ${COMPOSE} run --rm \
+            node \
+            sh -c "cd $PLUGIN_DIR && ./node_modules/.bin/grunt $@"
 
     # If "gulp" is used, run gulp
     # from our node container
     elif [ "$1" == "gulp" ]; then
-        shift 1
+        needs_plugin_name $@
+        shift 2
+
         ${COMPOSE} run --rm \
             node \
-            ./node_modules/.bin/gulp "$@"
+            sh -c "cd $PLUGIN_DIR && ./node_modules/.bin/gulp $@"
 
     # If "dump" is used, run mysqldump
     # from our mysql container

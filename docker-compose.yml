@@ -29,7 +29,7 @@ services:
     image: wpdocker/node
     user: node
     volumes:
-     - .:/var/www/html
+     - ./src:/var/www/html
     networks:
      - wpdocker
   mysql:
